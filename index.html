@@ -5149,6 +5149,7 @@
 
     let currentStage = 'contact';
     let activeNodeId = 'start_contact';
+    let hasRenderedScriptOnce = false; // forces a real render on first load, since the file may ship with stale pre-baked HTML for the default stage
     let currentVariablesState = {};
     let stageNodes = {}; 
 
@@ -6070,7 +6071,7 @@
 
       renderStageHeaderBadges();
 
-      if (isStageChange || isElementMissing) {
+      if (isStageChange || isElementMissing || !hasRenderedScriptOnce) {
         renderScriptPage();
       }
 
@@ -6089,6 +6090,7 @@
 
     function renderScriptPage() {
       if (typeof closeCoverageComparison === 'function') closeCoverageComparison();
+      hasRenderedScriptOnce = true;
       const bodyContainer = document.getElementById('script-body-text');
       bodyContainer.innerHTML = '';
 
