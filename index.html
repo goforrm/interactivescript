@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <html lang="en" class="js-focus-visible" data-js-focus-visible=""><head>
-<link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet">
-<script src="https://assets.calendly.com/assets/external/widget.js" defer></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Raoul Moreno Farmers Insurance - Smart Script Studio &amp; HUD</title>
@@ -1764,6 +1762,27 @@
     <div id="script-resizer" title="Drag to resize the script area" aria-hidden="true" class="hidden lg:flex"></div>
     <section id="coverage-view" class="hidden flex-1 h-[calc(100vh-61px)] overflow-hidden bg-slate-950"><iframe id="coverage-frame" class="w-full h-full border-0" title="Coverage Comparison"></iframe></section>
     <div id="comments-float" class="hidden lg:block fixed top-24 right-8 z-30 w-72 max-w-[22vw]"><div class="comments-drag-handle flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1 px-1 select-none" onmousedown="startCommentsDrag(event)" title="Drag to reposition vertically"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 text-slate-600 shrink-0"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>Other Comments</div><div id="comments-float-text" contenteditable="true" oninput="onCommentsFloatInput(this)" data-ph="Type notes…" class="min-h-[80px] rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm italic text-white focus:outline-none focus:border-blue-500 transition-all shadow-lg"></div></div>
+
+    <!-- Booking modal: Calendly iframe + a live fill-in guide, side by side -->
+    <div id="booking-modal" class="hidden fixed inset-0 z-[9995] bg-black/60 backdrop-blur-sm items-center justify-center p-4 lg:p-8" onkeydown="if(event.key==='Escape')closeBookingWidget();" onclick="if(event.target===this)closeBookingWidget();">
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800 shrink-0">
+          <div class="flex items-center gap-2 text-sm font-bold text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-blue-400"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            Book Appointment
+          </div>
+          <button onclick="closeBookingWidget()" class="text-slate-400 hover:text-white transition-colors" title="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+          </button>
+        </div>
+        <div class="flex-1 flex min-h-0">
+          <div class="flex-1 min-w-0 bg-white">
+            <iframe id="booking-iframe" class="w-full h-full border-0" title="Book Appointment — Calendly" src="about:blank"></iframe>
+          </div>
+          <div id="booking-guide-panel" class="hidden lg:block w-[300px] shrink-0 border-l border-slate-800 bg-slate-900/40 overflow-y-auto p-5"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- RIGHT EXPANDABLE GAME-STYLE TOOLKIT -->
     <div class="fixed bottom-6 right-6 z-50 flex flex-col items-end">
@@ -6253,22 +6272,106 @@
       var inp=document.getElementById("access-input"); if(inp) inp.focus();
     })();
     const CALENDLY_URL = "https://calendly.com/raoul-farmerslaredo/30min";
+
+    function bookingGV(id){ return (currentVariablesState[id] || "").trim(); }
+
+    function bookingPrepMessage(){
+      const agentName = bookingGV("agent-name") || "[Agent]";
+      const customerName = [bookingGV("pni-fname"), bookingGV("pni-lname")].filter(Boolean).join(" ") || "[Customer Name]";
+      return "This will be a phone call with " + agentName + " from Farmers Insurance and " + customerName + " to discuss insurance options.";
+    }
+
+    function buildCalendlyUrl(){
+      const agentName = bookingGV("agent-name");
+      const agentEmail = bookingGV("agent-email");
+      const params = new URLSearchParams();
+      if(agentName) params.set("name", agentName);
+      if(agentEmail) params.set("email", agentEmail);
+      // "Please share anything..." is this event type's first (only) custom question -> a1
+      params.set("a1", bookingPrepMessage());
+      params.set("embed_domain", location.hostname || "app");
+      params.set("embed_type", "Inline");
+      return CALENDLY_URL + "?" + params.toString();
+    }
+
+    function guideFieldRow(label, value, hint){
+      const safeVal = sssEsc(value || "—");
+      const hintHtml = hint ? `<div class="text-[10px] text-slate-600 mt-0.5">${sssEsc(hint)}</div>` : "";
+      return `<div class="flex items-start justify-between gap-2 mb-2 bg-slate-900/70 border border-slate-800 rounded-lg px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-[10px] text-slate-500 uppercase tracking-wide">${sssEsc(label)}</div>
+            <div class="text-xs text-slate-200 font-mono truncate">${safeVal}</div>
+            ${hintHtml}
+          </div>
+          <button onclick="copyGuideValue(this)" data-copy-value="${safeVal}" class="text-[10px] font-bold text-blue-400 hover:text-blue-300 shrink-0 mt-0.5">Copy</button>
+        </div>`;
+    }
+
+    function renderBookingGuide(){
+      const agentName = bookingGV("agent-name") || "—";
+      const agentEmail = bookingGV("agent-email") || "—";
+      const agentPhone = bookingGV("agent-phone") || "—";
+      const leadPhone = bookingGV("pni-phone1") || bookingGV("pni-phone2") || "—";
+      const msg = bookingPrepMessage();
+
+      const panel = document.getElementById("booking-guide-panel");
+      if(!panel) return;
+      panel.innerHTML = `
+        <div class="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-1">How to fill this out</div>
+        <p class="text-[10.5px] text-slate-600 mb-4 leading-relaxed">Name, Email, and the message below are pre-filled where your form allows it — double-check before confirming.</p>
+
+        <div class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-cyan-400 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Agent (you) — so you get notified
+        </div>
+        ${guideFieldRow("Name", agentName)}
+        ${guideFieldRow("Email", agentEmail)}
+        ${guideFieldRow("Phone Number", agentPhone)}
+        ${guideFieldRow("Guest Email(s)", agentEmail)}
+
+        <div class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-emerald-400 mt-5 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+          Lead — so they get a reminder
+        </div>
+        ${guideFieldRow("Send text messages to", leadPhone)}
+
+        <div class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400 mt-5 mb-2">"Please share anything..."</div>
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-300 leading-relaxed mb-2">${sssEsc(msg)}</div>
+        <button onclick="copyGuideValue(this)" data-copy-value="${sssEsc(msg)}" class="text-[11px] font-bold text-blue-400 hover:text-blue-300">Copy message</button>
+      `;
+    }
+
+    function copyGuideValue(btn){
+      const val = btn.getAttribute("data-copy-value") || "";
+      if(!val || val === "—") return;
+      const doneLabel = btn.textContent.indexOf("message") >= 0 ? "Copied!" : "Copied";
+      const orig = btn.textContent;
+      navigator.clipboard.writeText(val).then(function(){
+        btn.textContent = doneLabel;
+        setTimeout(function(){ btn.textContent = orig; }, 1200);
+      }).catch(function(){});
+    }
+
     function openBookingWidget(){
-      if(window.Calendly && typeof Calendly.initPopupWidget === "function"){
-        Calendly.initPopupWidget({ url: CALENDLY_URL });
-      } else {
-        // Widget script still loading (or blocked) — retry briefly, then fall back to a new tab.
-        var tries = 0;
-        var t = setInterval(function(){
-          tries++;
-          if(window.Calendly && typeof Calendly.initPopupWidget === "function"){
-            clearInterval(t); Calendly.initPopupWidget({ url: CALENDLY_URL });
-          } else if(tries > 15){
-            clearInterval(t); window.open(CALENDLY_URL, "_blank");
-          }
-        }, 200);
-      }
+      const modal = document.getElementById("booking-modal");
+      const iframe = document.getElementById("booking-iframe");
+      if(!modal || !iframe) return false;
+      iframe.src = buildCalendlyUrl();
+      renderBookingGuide();
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      modal.setAttribute("tabindex", "-1");
+      modal.focus();
       return false;
+    }
+
+    function closeBookingWidget(){
+      const modal = document.getElementById("booking-modal");
+      const iframe = document.getElementById("booking-iframe");
+      if(!modal) return;
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+      if(iframe) iframe.src = "about:blank";
     }
     const SSS_COMMENTS_TOP_KEY = 'sss_comments_top_v1';
     let commentsDragging = false, commentsDragOffsetY = 0;
